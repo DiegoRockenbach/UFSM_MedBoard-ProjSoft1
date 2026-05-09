@@ -1,0 +1,918 @@
+"""
+app/main.py
+MedBoard – Dashboard de Saúde NHANES
+Projeto de Software 1 · UFSM
+
+Execução:
+    streamlit run app/main.py
+"""
+
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+
+from database import load_data
+
+# ── Configuração da página ────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="MedBoard – Dashboard de Saúde",
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={"About": "MedBoard · Projeto de Software 1 · UFSM"},
+)
+
+# ── CSS personalizado ─────────────────────────────────────────────────────────
+st.markdown(
+    """
+    <style>
+    /* Fundo principal */
+    .main { background-color: #F8FAFC; }
+
+    /* Cards de métricas */
+    [data-testid="metric-container"] {
+        background-color: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        padding: 16px 20px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    /* Barra de abas */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px;
+        background-color: #EFF6FF;
+        padding: 6px 8px;
+        border-radius: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 42px;
+        padding: 0 18px;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 0.9rem;
+    }
+
+    /* Título principal */
+    h1 { color: #1E3A5F !important; font-size: 1.9rem !important; }
+    h2 { color: #1E40AF !important; }
+    h3 { color: #374151 !important; }
+
+    /* Rodapé Streamlit oculto */
+    footer { visibility: hidden; }
+
+    /* Reduz espaço em branco no topo */
+    .main .block-container { padding-top: 1rem !important; }
+
+    /* Só afeta blocos com 6+ colunas = rows de badges (7 colunas) */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6)) {
+        gap: 6px !important;
+        margin-bottom: -10px !important;
+    }
+
+    [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
+    [data-testid="stButton"] button {
+        border-radius: 3px !important;
+        height: auto !important;
+        min-height: 34px !important;
+        padding: 4px 10px !important;
+        font-size: 0.78rem !important;
+        line-height: 1.3 !important;
+        white-space: normal !important;
+        overflow: hidden;
+        text-overflow: unset;
+        word-break: break-word;
+    }
+
+    /* Badge ativa — azul suave */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
+    [data-testid="baseButton-primary"] {
+        background-color: #6B9DC2 !important;
+        border-color: #6B9DC2 !important;
+        color: white !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
+    [data-testid="baseButton-primary"]:hover {
+        background-color: #5A8CB1 !important;
+        border-color: #5A8CB1 !important;
+    }
+
+    /* Badge pinada (disabled) — mesmo visual da ativa, sem efeito de desabilitado */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
+    [data-testid="baseButton-primary"][disabled] {
+        background-color: #6B9DC2 !important;
+        border-color: #6B9DC2 !important;
+        color: white !important;
+        opacity: 1 !important;
+        cursor: default !important;
+    }
+
+    /* Badge inativa — cinza claro */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
+    [data-testid="baseButton-secondary"] {
+        background-color: #EDF2F7 !important;
+        border-color: #CBD5E1 !important;
+        color: #4A5568 !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
+    [data-testid="baseButton-secondary"]:hover {
+        background-color: #E2E8F0 !important;
+    }
+
+
+    /* Caixa de informação customizada */
+    .medboard-info {
+        background-color: #EFF6FF;
+        border-left: 4px solid #3B82F6;
+        padding: 10px 14px;
+        border-radius: 0 8px 8px 0;
+        font-size: 0.88rem;
+        color: #1E3A5F;
+        margin: 6px 0 14px 0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ── Constantes ────────────────────────────────────────────────────────────────
+CVD_CONDITIONS: dict[str, str] = {
+    "congestive":   "Insuficiência Cardíaca",
+    "coronary":     "Doença Arterial Coronariana",
+    "heart_attack": "Infarto do Miocárdio",
+    "stroke":       "AVC",
+    "angina":       "Angina",
+}
+
+NUTRIENTS_MACRO    = ["protein", "carbohydrates", "sugars", "fiber",
+                      "saturated_fat", "monounsaturated_fat", "polyunsaturated_fat", "cholesterol"]
+NUTRIENTS_VITAMINS = ["vitamin_c", "vitamin_d", "vitamin_e", "vitamin_k",
+                      "vitamin_b6", "vitamin_b12", "thiamin", "riboflavin",
+                      "niacin", "folic_acid", "food_folate", "beta_carotene",
+                      "cryptoxanthin", "lutein_zeaxanthin"]
+NUTRIENTS_MINERALS = ["calcium", "iron", "magnesium", "zinc", "sodium",
+                      "potassium", "phosphorus", "copper", "selenium", "choline"]
+
+LABELS: dict[str, str] = {
+    "protein":             "Proteína (g)",
+    "carbohydrates":       "Carboidratos (g)",
+    "sugars":              "Açúcares (g)",
+    "fiber":               "Fibra (g)",
+    "saturated_fat":       "Gordura Saturada (g)",
+    "monounsaturated_fat": "Gordura Monoinsaturada (g)",
+    "polyunsaturated_fat": "Gordura Poliinsaturada (g)",
+    "cholesterol":         "Colesterol Dietético (mg)",
+    "vitamin_c":           "Vitamina C (mg)",
+    "vitamin_d":           "Vitamina D (mcg)",
+    "vitamin_e":           "Vitamina E (mg)",
+    "vitamin_k":           "Vitamina K (mcg)",
+    "vitamin_b6":          "Vitamina B6 (mg)",
+    "vitamin_b12":         "Vitamina B12 (mcg)",
+    "thiamin":             "Tiamina (mg)",
+    "riboflavin":          "Riboflavina (mg)",
+    "niacin":              "Niacina (mg)",
+    "folic_acid":          "Ácido Fólico (mcg)",
+    "food_folate":         "Folato Alimentar (mcg)",
+    "beta_carotene":       "Beta-Caroteno (mcg)",
+    "cryptoxanthin":       "Criptoxantina (mcg)",
+    "lutein_zeaxanthin":   "Luteína + Zeaxantina (mcg)",
+    "calcium":             "Cálcio (mg)",
+    "iron":                "Ferro (mg)",
+    "magnesium":           "Magnésio (mg)",
+    "zinc":                "Zinco (mg)",
+    "sodium":              "Sódio (mg)",
+    "potassium":           "Potássio (mg)",
+    "phosphorus":          "Fósforo (mg)",
+    "copper":              "Cobre (mg)",
+    "selenium":            "Selênio (mcg)",
+    "choline":             "Colina (mg)",
+    "age":                 "Idade (anos)",
+    "bmi":                 "IMC (kg/m²)",
+    "waist_circ":          "Circ. Abdominal (cm)",
+    "systolic_bp":         "PA Sistólica (mmHg)",
+    "diastolic_bp":        "PA Diastólica (mmHg)",
+    "total_cholesterol":   "Colesterol Total (mg/dL)",
+    "c_reactive":          "Proteína C-Reativa (mg/L)",
+}
+
+TPLT   = "plotly_white"
+C_BLUE = "#1E40AF"
+C_GRN  = "#10B981"
+C_RED  = "#DC2626"
+C_AMB  = "#F59E0B"
+C_SEQ  = [C_BLUE, C_GRN, C_AMB, C_RED, "#8B5CF6", "#EC4899", "#14B8A6"]
+
+
+def lbl(col: str) -> str:
+    return LABELS.get(col, col.replace("_", " ").title())
+
+
+# ── Carregamento de dados ─────────────────────────────────────────────────────
+@st.cache_data(show_spinner="Carregando dados de saúde…")
+def get_data() -> pd.DataFrame:
+    return load_data()
+
+
+df_full = get_data()
+
+# ── Sidebar – filtros ─────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 🏥 MedBoard")
+    st.markdown("**Dashboard de Saúde NHANES**")
+    st.caption(f"Base: {len(df_full):,} registros · NHANES CVD")
+    st.divider()
+
+    st.markdown("### 🔍 Filtros Globais")
+
+    # Faixa etária
+    age_vals = df_full["age"].dropna()
+    age_min, age_max = int(age_vals.min()), int(age_vals.max())
+    age_range = st.slider(
+        "Faixa Etária (anos)",
+        min_value=age_min, max_value=age_max,
+        value=(age_min, age_max),
+        help="Filtra todos os gráficos e a tabela por intervalo de idade.",
+    )
+
+    # IMC
+    bmi_vals = df_full["bmi"].dropna()
+    bmi_min, bmi_max = float(bmi_vals.min()), float(bmi_vals.max())
+    include_no_bmi = st.checkbox("Incluir registros sem IMC", value=True)
+    bmi_range = st.slider(
+        "Faixa de IMC (kg/m²)",
+        min_value=round(bmi_min, 1), max_value=round(bmi_max, 1),
+        value=(round(bmi_min, 1), round(bmi_max, 1)),
+        help="Índice de Massa Corporal.",
+    )
+
+    # Condições cardiovasculares
+    st.markdown("**Condições Cardiovasculares**")
+    cvd_filter: dict[str, bool] = {}
+    for col, label in CVD_CONDITIONS.items():
+        if col in df_full.columns:
+            cvd_filter[col] = st.checkbox(
+                f"Apenas com {label}", value=False, key=f"sidebar_cvd_{col}"
+            )
+
+    if st.button("↺ Resetar Filtros", use_container_width=True):
+        st.rerun()
+
+    st.divider()
+    st.caption("Projeto de Software 1 · UFSM")
+
+
+# ── Aplicar filtros ───────────────────────────────────────────────────────────
+def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
+    mask = pd.Series(True, index=df.index)
+
+    if "age" in df.columns:
+        mask &= df["age"].between(age_range[0], age_range[1])
+
+    if "bmi" in df.columns:
+        bmi_mask = df["bmi"].between(bmi_range[0], bmi_range[1])
+        if include_no_bmi:
+            bmi_mask |= df["bmi"].isna()
+        mask &= bmi_mask
+
+    for col, selected in cvd_filter.items():
+        if selected and col in df.columns:
+            mask &= df[col] == True
+
+    return df[mask].copy()
+
+
+df = apply_filters(df_full)
+
+# ── Abas principais ───────────────────────────────────────────────────────────
+tab2, tab1, tab3, tab4, tab5 = st.tabs([
+    "🔍  Explorar Dados",
+    "📊  Visão Geral",
+    "🥦  Nutrição",
+    "❤️  Fatores de Risco",
+    "📈  Correlações",
+])
+
+
+# ═══════════════════════════════════════════════════════
+#  TAB 1 – VISÃO GERAL
+# ═══════════════════════════════════════════════════════
+with tab1:
+    st.subheader("Visão Geral da População")
+
+    # KPIs
+    c1, c2, c3, c4, c5 = st.columns(5)
+
+    with c1:
+        st.metric("👥 Registros", f"{len(df):,}")
+
+    with c2:
+        avg_age = df["age"].mean() if "age" in df.columns else 0
+        st.metric("📅 Idade Média", f"{avg_age:.1f} anos")
+
+    with c3:
+        avg_bmi = df["bmi"].mean() if "bmi" in df.columns else 0
+        st.metric("⚖️ IMC Médio", f"{avg_bmi:.1f} kg/m²")
+
+    with c4:
+        avg_sbp = df["systolic_bp"].mean() if "systolic_bp" in df.columns else 0
+        st.metric("🩺 PA Sistólica Média", f"{avg_sbp:.0f} mmHg")
+
+    with c5:
+        cvd_cols_present = [c for c in CVD_CONDITIONS if c in df.columns]
+        if cvd_cols_present:
+            n_cvd = df[cvd_cols_present].any(axis=1).sum()
+            pct_cvd = n_cvd / len(df) * 100 if len(df) else 0
+            st.metric("❤️ Com alguma DCV", f"{pct_cvd:.1f}%", f"{n_cvd:,} casos")
+
+    st.divider()
+
+    # ── Distribuições: Idade e IMC ──
+    col_age, col_bmi_chart = st.columns(2)
+
+    with col_age:
+        st.markdown("#### Distribuição por Idade")
+        if "age" in df.columns:
+            fig = px.histogram(
+                df.dropna(subset=["age"]), x="age", nbins=30,
+                color_discrete_sequence=[C_BLUE],
+                template=TPLT,
+                labels={"age": "Idade (anos)", "count": "Quantidade"},
+            )
+            fig.update_traces(marker_line_color="white", marker_line_width=0.5)
+            fig.update_layout(showlegend=False, height=310,
+                              margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col_bmi_chart:
+        st.markdown("#### Distribuição do IMC")
+        if "bmi" in df.columns:
+            fig = px.histogram(
+                df.dropna(subset=["bmi"]), x="bmi", nbins=30,
+                color_discrete_sequence=[C_GRN],
+                template=TPLT,
+                labels={"bmi": "IMC (kg/m²)", "count": "Quantidade"},
+            )
+            for x_val, txt, color in [
+                (18.5, "Abaixo do peso", "#94A3B8"),
+                (25,   "Sobrepeso",      C_AMB),
+                (30,   "Obesidade",      C_RED),
+            ]:
+                fig.add_vline(x=x_val, line_dash="dot", line_color=color,
+                              annotation_text=txt, annotation_font_size=11)
+            fig.update_traces(marker_line_color="white", marker_line_width=0.5)
+            fig.update_layout(showlegend=False, height=310,
+                              margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ── Prevalência CVD ──
+    st.markdown("#### Prevalência de Condições Cardiovasculares")
+    cvd_rows = []
+    for col, label in CVD_CONDITIONS.items():
+        if col in df.columns:
+            n = int(df[col].sum())
+            total = len(df)
+            cvd_rows.append({
+                "Condição": label,
+                "Casos": n,
+                "Percentual (%)": round(n / total * 100, 2) if total else 0,
+            })
+
+    if cvd_rows:
+        df_cvd = pd.DataFrame(cvd_rows)
+        fig = px.bar(
+            df_cvd, x="Condição", y="Percentual (%)",
+            color="Percentual (%)",
+            color_continuous_scale=[[0, "#FEF3C7"], [0.5, C_AMB], [1, C_RED]],
+            text="Casos",
+            template=TPLT,
+            labels={"Condição": "", "Percentual (%)": "% da População"},
+        )
+        fig.update_traces(texttemplate="%{text:,} casos", textposition="outside")
+        fig.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0),
+                          coloraxis_showscale=False, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ── Faixas etárias ──
+    col_pie, col_info = st.columns([3, 2])
+    with col_pie:
+        st.markdown("#### Composição por Faixa Etária")
+        if "age" in df.columns:
+            bins   = [0, 12, 18, 35, 50, 65, 200]
+            labels_age = ["Criança (0–12)", "Adolescente (13–18)",
+                          "Adulto jovem (19–35)", "Adulto (36–50)",
+                          "Meia-idade (51–65)", "Idoso (65+)"]
+            df_tmp = df.copy()
+            df_tmp["Faixa"] = pd.cut(df_tmp["age"], bins=bins,
+                                     labels=labels_age, right=True)
+            counts = df_tmp["Faixa"].value_counts().sort_index()
+            fig = px.pie(
+                values=counts.values, names=counts.index,
+                color_discrete_sequence=px.colors.qualitative.Set2,
+                hole=0.42, template=TPLT,
+            )
+            fig.update_layout(height=340, margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col_info:
+        st.markdown("#### Resumo Clínico")
+        summary_cols = {
+            "systolic_bp":       "PA Sistólica",
+            "diastolic_bp":      "PA Diastólica",
+            "total_cholesterol": "Colesterol Total",
+            "c_reactive":        "Proteína C-Reativa",
+            "waist_circ":        "Circ. Abdominal",
+        }
+        rows = []
+        for col, name in summary_cols.items():
+            if col in df.columns:
+                s = df[col].dropna()
+                rows.append({
+                    "Indicador": name,
+                    "Média": f"{s.mean():.1f}",
+                    "Mediana": f"{s.median():.1f}",
+                    "Desvio": f"{s.std():.1f}",
+                })
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                         hide_index=True)
+
+
+# ═══════════════════════════════════════════════════════
+#  TAB 2 – EXPLORAR DADOS
+# ═══════════════════════════════════════════════════════
+with tab2:
+    all_cols = list(df.columns)
+    default_visible = ["seqn", "age", "bmi", "systolic_bp", "diastolic_bp",
+                       "total_cholesterol", "c_reactive",
+                       "congestive", "coronary", "heart_attack", "stroke", "angina"]
+    default_visible = [c for c in default_visible if c in all_cols]
+
+    # Inicializa estado das badges
+    PINNED = {"seqn"}  # colunas sempre visíveis e não desselecionáveis
+
+    if "visible_cols" not in st.session_state:
+        st.session_state.visible_cols = set(default_visible)
+    st.session_state.visible_cols &= set(all_cols)   # remove colunas inexistentes
+    st.session_state.visible_cols |= PINNED           # garante pinadas sempre presentes
+
+    def _toggle_col(col_name):
+        if col_name in PINNED:
+            return
+        if col_name in st.session_state.visible_cols:
+            st.session_state.visible_cols.discard(col_name)
+        else:
+            st.session_state.visible_cols.add(col_name)
+
+    def _select_all():
+        st.session_state.visible_cols = set(all_cols)
+
+    def _deselect_all():
+        st.session_state.visible_cols = set(PINNED)
+
+    # Badges de seleção de colunas (6 por linha → 1 slot livre no final para ações)
+    BADGES_PER_ROW = 6
+    rows = [all_cols[i : i + BADGES_PER_ROW] for i in range(0, len(all_cols), BADGES_PER_ROW)]
+
+    for idx, row in enumerate(rows):
+        is_last = (idx == len(rows) - 1)
+        cols_ui = st.columns(BADGES_PER_ROW)
+
+        for j, col_name in enumerate(row):
+            with cols_ui[j]:
+                st.button(
+                    lbl(col_name),
+                    key=f"badge_{col_name}",
+                    type="primary" if col_name in st.session_state.visible_cols else "secondary",
+                    use_container_width=True,
+                    on_click=_toggle_col,
+                    args=(col_name,),
+                    disabled=col_name in PINNED,
+                )
+
+        if is_last and len(row) < BADGES_PER_ROW:
+            with cols_ui[len(row)]:
+                sub1, sub2 = st.columns(2)
+                with sub1:
+                    st.button("☑", key="btn_sel_all", use_container_width=True,
+                              on_click=_select_all, help="Selecionar todas as colunas")
+                with sub2:
+                    st.button("☐", key="btn_desel_all", use_container_width=True,
+                              on_click=_deselect_all, help="Desmarcar todas as colunas")
+
+    selected_cols = [c for c in all_cols if c in st.session_state.visible_cols]
+
+    ctrl_sort, ctrl_dir, ctrl_dl = st.columns([4, 1.2, 1.4])
+
+    with ctrl_sort:
+        sort_options = selected_cols if selected_cols else all_cols
+        sort_col = st.selectbox("Ordenar por", options=sort_options, format_func=lbl,
+                                key="sort_col_key")
+
+    with ctrl_dir:
+        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+        sort_asc = st.radio("Direção", ["Crescente ▲", "Decrescente ▼"],
+                            horizontal=False, label_visibility="collapsed")
+
+    with ctrl_dl:
+        st.markdown("<div style='height:25px'></div>", unsafe_allow_html=True)
+        csv_data = (df[selected_cols] if selected_cols else df).to_csv(index=False).encode("utf-8")
+        n_rows = len(df[selected_cols]) if selected_cols else len(df)
+        st.download_button(
+            label="⬇ Exportar CSV",
+            data=csv_data,
+            file_name="nhanes_filtrado.csv",
+            mime="text/csv",
+            use_container_width=True,
+            type="primary",
+            help=f"Baixar {n_rows:,} registros com {len(selected_cols)} colunas em CSV",
+        )
+
+    # Prepara DataFrame de exibição
+    disp_df = df[selected_cols].copy() if selected_cols else df.copy()
+    if sort_col and sort_col in disp_df.columns:
+        disp_df = disp_df.sort_values(sort_col, ascending=(sort_asc == "Crescente ▲"))
+
+    # Paginação
+    PAGE_SIZE = 25
+    total_rows  = len(disp_df)
+    total_pages = max(1, (total_rows - 1) // PAGE_SIZE + 1)
+
+    if "table_page" not in st.session_state:
+        st.session_state.table_page = 1
+    st.session_state.table_page = min(st.session_state.table_page, total_pages)
+    st.session_state._total_pages = total_pages
+
+    def _go_first(): st.session_state.table_page = 1
+    def _go_prev():
+        if st.session_state.table_page > 1:
+            st.session_state.table_page -= 1
+    def _go_next():
+        if st.session_state.table_page < st.session_state._total_pages:
+            st.session_state.table_page += 1
+    def _go_last():
+        st.session_state.table_page = st.session_state._total_pages
+
+    pg1, pg2, pg3, pg4, pg5 = st.columns([1, 1, 5, 1, 1])
+    with pg1:
+        st.button("⏮", on_click=_go_first, help="Primeira página")
+    with pg2:
+        st.button("◀", on_click=_go_prev, help="Página anterior")
+    with pg3:
+        st.markdown(
+            f"<center>Página <b>{st.session_state.table_page}</b> de "
+            f"<b>{total_pages}</b> &nbsp;·&nbsp; <b>{total_rows:,}</b> registros</center>",
+            unsafe_allow_html=True,
+        )
+    with pg4:
+        st.button("▶", on_click=_go_next, help="Próxima página")
+    with pg5:
+        st.button("⏭", on_click=_go_last, help="Última página")
+
+    start = (st.session_state.table_page - 1) * PAGE_SIZE
+    st.dataframe(
+        disp_df.iloc[start : start + PAGE_SIZE],
+        use_container_width=True,
+        height=540,
+        hide_index=True,
+    )
+
+
+# ═══════════════════════════════════════════════════════
+#  TAB 3 – NUTRIÇÃO
+# ═══════════════════════════════════════════════════════
+with tab3:
+    st.subheader("Análise Nutricional")
+
+    cat_sel, _ = st.columns([2, 5])
+    with cat_sel:
+        categoria = st.selectbox(
+            "Categoria de Nutrientes",
+            ["Macronutrientes", "Vitaminas", "Minerais"],
+        )
+
+    cat_map = {
+        "Macronutrientes": NUTRIENTS_MACRO,
+        "Vitaminas":       NUTRIENTS_VITAMINS,
+        "Minerais":        NUTRIENTS_MINERALS,
+    }
+    nutrients = [n for n in cat_map[categoria] if n in df.columns]
+
+    if not nutrients:
+        st.warning("Nenhuma coluna nutricional disponível nesta categoria.")
+    else:
+        # ── Box plots de distribuição ──
+        st.markdown(f"#### Distribuição de {categoria}")
+        df_melt = (
+            df[nutrients]
+            .melt(var_name="Nutriente", value_name="Valor")
+            .dropna()
+        )
+        df_melt["Nutriente"] = df_melt["Nutriente"].map(lbl)
+
+        fig = px.box(
+            df_melt, x="Nutriente", y="Valor",
+            color="Nutriente",
+            color_discrete_sequence=C_SEQ * 4,
+            template=TPLT, points=False,
+        )
+        fig.update_layout(
+            showlegend=False, height=400,
+            margin=dict(l=0, r=0, t=10, b=0),
+            xaxis_tickangle=-30,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ── Comparação CVD vs sem CVD ──
+        st.markdown("#### Comparação: Com × Sem Condição Cardiovascular")
+
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            compare_nut = st.selectbox(
+                "Nutriente para comparar",
+                options=nutrients,
+                format_func=lbl,
+            )
+        with cc2:
+            compare_cvd = st.selectbox(
+                "Condição cardiovascular",
+                options=[c for c in CVD_CONDITIONS if c in df.columns],
+                format_func=lambda x: CVD_CONDITIONS[x],
+                key="nut_cvd",
+            )
+
+        if compare_cvd in df.columns and compare_nut in df.columns:
+            df_cmp = df[[compare_nut, compare_cvd]].dropna(subset=[compare_nut])
+            df_cmp["Status"] = df_cmp[compare_cvd].apply(
+                lambda x: CVD_CONDITIONS[compare_cvd] if x else "Sem condição"
+            )
+            fig = px.violin(
+                df_cmp, x="Status", y=compare_nut,
+                color="Status",
+                color_discrete_map={
+                    CVD_CONDITIONS[compare_cvd]: C_RED,
+                    "Sem condição": C_BLUE,
+                },
+                box=True, points=False, template=TPLT,
+                labels={compare_nut: lbl(compare_nut)},
+            )
+            fig.update_layout(showlegend=False, height=380,
+                              margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+        # ── Estatísticas descritivas ──
+        st.markdown("#### Estatísticas Descritivas")
+        desc = df[nutrients].describe().T
+        desc.index = [lbl(i) for i in desc.index]
+        desc = desc.rename(columns={
+            "count": "Registros", "mean": "Média", "std": "Desvio Padrão",
+            "min": "Mínimo", "25%": "P25", "50%": "Mediana",
+            "75%": "P75", "max": "Máximo",
+        })
+        st.dataframe(desc.round(2), use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════
+#  TAB 4 – FATORES DE RISCO
+# ═══════════════════════════════════════════════════════
+with tab4:
+    st.subheader("Fatores de Risco Cardiovascular")
+
+    # ── Dispersão pressão arterial ──
+    if "systolic_bp" in df.columns and "diastolic_bp" in df.columns:
+        st.markdown("#### Pressão Arterial por Condição")
+
+        bp_cvd = st.selectbox(
+            "Colorir por condição",
+            options=[c for c in CVD_CONDITIONS if c in df.columns],
+            format_func=lambda x: CVD_CONDITIONS[x],
+            key="bp_cvd",
+        )
+
+        df_bp = df[["systolic_bp", "diastolic_bp", bp_cvd]].dropna(
+            subset=["systolic_bp", "diastolic_bp"]
+        )
+        df_bp["Status"] = df_bp[bp_cvd].apply(
+            lambda x: CVD_CONDITIONS[bp_cvd] if x else "Sem condição"
+        )
+        sample = df_bp.sample(min(3000, len(df_bp)), random_state=42)
+
+        fig = px.scatter(
+            sample, x="systolic_bp", y="diastolic_bp", color="Status",
+            color_discrete_map={CVD_CONDITIONS[bp_cvd]: C_RED, "Sem condição": C_BLUE},
+            opacity=0.4, template=TPLT,
+            labels={"systolic_bp": "PA Sistólica (mmHg)",
+                    "diastolic_bp": "PA Diastólica (mmHg)"},
+        )
+        fig.add_vline(x=130, line_dash="dot", line_color=C_AMB,
+                      annotation_text="Hipertensão est. 1 (≥130)", annotation_font_size=11)
+        fig.add_hline(y=80, line_dash="dot", line_color=C_AMB)
+        fig.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=0),
+                          legend=dict(orientation="h", y=1.08))
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+    # ── IMC médio por condição ──
+    col_bmi2, col_chol2 = st.columns(2)
+
+    with col_bmi2:
+        st.markdown("#### IMC Médio: Com × Sem DCV")
+        if "bmi" in df.columns:
+            bmi_rows = []
+            for cond, label in CVD_CONDITIONS.items():
+                if cond in df.columns:
+                    with_c    = df.loc[df[cond] == True,  "bmi"].dropna()
+                    without_c = df.loc[df[cond] == False, "bmi"].dropna()
+                    if len(with_c) > 5:
+                        bmi_rows.append({"Condição": label[:22],
+                                         "Com condição": with_c.mean(),
+                                         "Sem condição": without_c.mean()})
+
+            if bmi_rows:
+                df_bmi2 = pd.DataFrame(bmi_rows).melt(
+                    id_vars="Condição", var_name="Status", value_name="IMC Médio"
+                )
+                fig = px.bar(
+                    df_bmi2, x="Condição", y="IMC Médio", color="Status",
+                    barmode="group",
+                    color_discrete_map={"Com condição": C_RED, "Sem condição": C_BLUE},
+                    template=TPLT,
+                )
+                fig.update_layout(height=370, margin=dict(l=0, r=0, t=10, b=0),
+                                  xaxis_tickangle=-20,
+                                  legend=dict(orientation="h", y=1.1))
+                st.plotly_chart(fig, use_container_width=True)
+
+    with col_chol2:
+        st.markdown("#### Colesterol Total por Condição")
+        if "total_cholesterol" in df.columns:
+            chol_cond = st.selectbox(
+                "Condição",
+                options=[c for c in CVD_CONDITIONS if c in df.columns],
+                format_func=lambda x: CVD_CONDITIONS[x],
+                key="chol_cond",
+            )
+            df_chol = df[["total_cholesterol", chol_cond]].dropna()
+            df_chol["Status"] = df_chol[chol_cond].apply(
+                lambda x: CVD_CONDITIONS[chol_cond] if x else "Sem condição"
+            )
+            fig = px.histogram(
+                df_chol, x="total_cholesterol", color="Status",
+                barmode="overlay", opacity=0.7, nbins=40, template=TPLT,
+                color_discrete_map={CVD_CONDITIONS[chol_cond]: C_RED,
+                                    "Sem condição": C_BLUE},
+                labels={"total_cholesterol": "Colesterol Total (mg/dL)"},
+            )
+            fig.update_layout(height=370, margin=dict(l=0, r=0, t=10, b=0),
+                              legend=dict(orientation="h", y=1.1))
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ── Proteína C-Reativa ──
+    st.markdown("#### Proteína C-Reativa por Condição Cardiovascular")
+    if "c_reactive" in df.columns:
+        crp_rows = []
+        for cond, label in CVD_CONDITIONS.items():
+            if cond in df.columns:
+                sub = df[["c_reactive", cond]].dropna(subset=["c_reactive"])
+                with_c    = sub.loc[sub[cond] == True,  "c_reactive"]
+                without_c = sub.loc[sub[cond] == False, "c_reactive"]
+                cap       = sub["c_reactive"].quantile(0.99)
+                with_filtered    = with_c[with_c <= cap]
+                without_filtered = without_c[without_c <= cap]
+                n_sample = min(len(without_filtered), max(len(with_filtered) * 2, 100))
+                for v in with_filtered:
+                    crp_rows.append({"Condição": label[:20], "Status": "Com condição", "PCR": v})
+                for v in without_filtered.sample(n_sample, random_state=42):
+                    crp_rows.append({"Condição": label[:20], "Status": "Sem condição", "PCR": v})
+
+        if crp_rows:
+            fig = px.box(
+                pd.DataFrame(crp_rows), x="Condição", y="PCR", color="Status",
+                color_discrete_map={"Com condição": C_RED, "Sem condição": C_BLUE},
+                points=False, template=TPLT,
+                labels={"PCR": "Proteína C-Reativa (mg/L)"},
+            )
+            fig.update_layout(height=390, margin=dict(l=0, r=0, t=10, b=0),
+                              xaxis_tickangle=-20,
+                              legend=dict(orientation="h", y=1.1))
+            st.plotly_chart(fig, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════
+#  TAB 5 – CORRELAÇÕES
+# ═══════════════════════════════════════════════════════
+with tab5:
+    st.subheader("Análise de Correlações")
+
+    # ── Mapa de calor ──
+    st.markdown("#### Mapa de Correlação — Marcadores Clínicos × Nutrientes-Chave")
+    key_nut  = ["protein", "fiber", "sodium", "potassium", "saturated_fat",
+                "vitamin_c", "vitamin_d", "calcium", "magnesium"]
+    clinical = ["age", "bmi", "systolic_bp", "diastolic_bp",
+                "total_cholesterol", "c_reactive"]
+    heat_cols = [c for c in key_nut + clinical if c in df.columns]
+
+    if len(heat_cols) >= 4:
+        df_corr = df[heat_cols].dropna(thresh=max(2, len(heat_cols) // 2))
+        corr    = df_corr.corr()
+        corr    = corr.rename(index={c: lbl(c) for c in corr.index},
+                              columns={c: lbl(c) for c in corr.columns})
+
+        fig = px.imshow(
+            corr, color_continuous_scale="RdBu_r",
+            zmin=-1, zmax=1, text_auto=".2f", aspect="auto", template=TPLT,
+        )
+        fig.update_traces(textfont_size=10)
+        fig.update_layout(
+            height=520, margin=dict(l=0, r=0, t=10, b=0),
+            coloraxis_colorbar=dict(title="Correlação"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown(
+        '<div class="medboard-info">'
+        "Valores próximos de +1 indicam correlação positiva forte; "
+        "próximos de −1 indicam correlação negativa forte; "
+        "próximos de 0 indicam ausência de relação linear."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.divider()
+
+    # ── Dispersão interativa ──
+    st.markdown("#### Explorador de Dispersão")
+
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+    sc1, sc2, sc3 = st.columns(3)
+    with sc1:
+        x_def = numeric_cols.index("bmi") if "bmi" in numeric_cols else 0
+        x_axis = st.selectbox("Eixo X", numeric_cols, index=x_def, format_func=lbl)
+    with sc2:
+        y_def = numeric_cols.index("total_cholesterol") if "total_cholesterol" in numeric_cols else 1
+        y_axis = st.selectbox("Eixo Y", numeric_cols, index=y_def, format_func=lbl)
+    with sc3:
+        color_opts = ["(nenhum)"] + [c for c in CVD_CONDITIONS if c in df.columns]
+        color_by   = st.selectbox(
+            "Colorir por",
+            options=color_opts,
+            format_func=lambda x: "(nenhum)" if x == "(nenhum)" else CVD_CONDITIONS.get(x, x),
+        )
+
+    extra = [color_by] if color_by != "(nenhum)" else []
+    df_sc = df[[x_axis, y_axis] + extra].dropna(subset=[x_axis, y_axis])
+    df_sc = df_sc.sample(min(3000, len(df_sc)), random_state=42)
+
+    if color_by != "(nenhum)" and color_by in df_sc.columns:
+        df_sc["Status"] = df_sc[color_by].apply(
+            lambda x: CVD_CONDITIONS[color_by] if x else "Sem condição"
+        )
+        c_field = "Status"
+        c_map   = {CVD_CONDITIONS[color_by]: C_RED, "Sem condição": C_BLUE}
+    else:
+        c_field = None
+        c_map   = None
+
+    fig = px.scatter(
+        df_sc, x=x_axis, y=y_axis,
+        color=c_field, color_discrete_map=c_map,
+        opacity=0.45, trendline="lowess", template=TPLT,
+        labels={x_axis: lbl(x_axis), y_axis: lbl(y_axis)},
+    )
+    fig.update_layout(height=450, margin=dict(l=0, r=0, t=10, b=0),
+                      legend=dict(orientation="h", y=1.08))
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Coeficiente de correlação
+    corr_val = df[[x_axis, y_axis]].dropna().corr().iloc[0, 1]
+    strength = (
+        "muito fraca" if abs(corr_val) < 0.1 else
+        "fraca"       if abs(corr_val) < 0.3 else
+        "moderada"    if abs(corr_val) < 0.5 else
+        "forte"       if abs(corr_val) < 0.7 else
+        "muito forte"
+    )
+    direction = "positiva" if corr_val >= 0 else "negativa"
+    st.info(
+        f"Correlação de Pearson entre **{lbl(x_axis)}** e **{lbl(y_axis)}**: "
+        f"**{corr_val:.4f}** — correlação **{strength} {direction}**."
+    )
+
+
+# ── Rodapé ────────────────────────────────────────────────────────────────────
+st.divider()
+st.markdown(
+    "<center><small>"
+    "MedBoard &nbsp;·&nbsp; Projeto de Software 1 &nbsp;·&nbsp; UFSM &nbsp;·&nbsp; "
+    "Dados: NHANES – National Health and Nutrition Examination Survey"
+    "</small></center>",
+    unsafe_allow_html=True,
+)
