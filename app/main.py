@@ -91,27 +91,35 @@ st.markdown(
         word-break: break-word;
     }
 
-    /* Badge ativa — azul suave */
+    /* Badge ativa */
     [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
-    [data-testid="baseButton-primary"] {
-        background-color: #6B9DC2 !important;
-        border-color: #6B9DC2 !important;
+    [data-testid="stBaseButton-primary"] {
+        background-color: #FA3939 !important;
+        border-color: #FA3939 !important;
         color: white !important;
     }
     [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
-    [data-testid="baseButton-primary"]:hover {
-        background-color: #5A8CB1 !important;
-        border-color: #5A8CB1 !important;
+    [data-testid="stBaseButton-primary"]:hover {
+        background-color: #fb5c5c !important;
+        border-color: #fb5c5c !important;
     }
 
     /* Badge pinada (disabled) — mesmo visual da ativa, sem efeito de desabilitado */
     [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(6))
-    [data-testid="baseButton-primary"][disabled] {
-        background-color: #6B9DC2 !important;
-        border-color: #6B9DC2 !important;
+    [data-testid="stBaseButton-primary"]:disabled {
+        background-color: #FA3939 !important;
+        border-color: #FA3939 !important;
         color: white !important;
         opacity: 1 !important;
-        cursor: default !important;
+        cursor: not-allowed !important;
+    }
+
+    /* Sliders — trilha e thumb */
+    [data-testid="stSidebar"] [data-testid="stSlider"] [data-baseweb="slider"] [data-testid="stSliderThumb"] {
+        background-color: #FA3939 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stSlider"] [data-baseweb="slider"] div[role="progressbar"] {
+        background-color: #FA3939 !important;
     }
 
     /* Badge inativa — cinza claro */
@@ -126,6 +134,35 @@ st.markdown(
         background-color: #E2E8F0 !important;
     }
 
+
+    /* Botões de navegação de página */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stColumn"]:nth-child(5)):not(:has([data-testid="stColumn"]:nth-child(6)))
+    [data-testid="stBaseButton-secondary"] {
+        height: 48px !important;
+        min-height: 48px !important;
+        font-size: 1.25rem !important;
+        padding: 1.2rem !important;
+    }
+
+    /* Botão Exportar CSV */
+    [data-testid="stDownloadButton"] [data-testid="stBaseButton-primary"] {
+        background-color: #FA3939 !important;
+        border-color: #FA3939 !important;
+    }
+    [data-testid="stDownloadButton"] [data-testid="stBaseButton-primary"]:hover {
+        background-color: #fb5c5c !important;
+        border-color: #fb5c5c !important;
+    }
+
+    /* Links dos autores na sidebar */
+    [data-testid="stSidebar"] small a {
+        color: #6B7280 !important;
+        text-decoration: none !important;
+        transition: color 0.15s;
+    }
+    [data-testid="stSidebar"] small a:hover {
+        color: #9CA3AF !important;
+    }
 
     /* Caixa de informação customizada */
     .medboard-info {
@@ -224,9 +261,44 @@ df_full = get_data()
 
 # ── Sidebar – filtros ─────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🏥 MedBoard")
-    st.markdown("**Dashboard de Saúde NHANES**")
-    st.caption(f"Base: {len(df_full):,} registros · NHANES CVD")
+    st.markdown(
+        """
+        <div style="
+            background: linear-gradient(145deg, #BD3A9A 0%, #F73670 50%, #FA3939 100%);
+            border-radius: 14px;
+            padding: 20px 18px 18px 18px;
+            margin-bottom: 2px;
+            box-shadow: 0 6px 20px rgba(15, 34, 64, 0.45);
+        ">
+            <div style="display:flex; align-items:center; gap:11px; margin-bottom:8px;">
+                <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="17" cy="17" r="16" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)" stroke-width="1.2"/>
+                    <path d="M17 27 C17 27 6 19.5 6 13a6 6 0 0 1 11-3.3A6 6 0 0 1 28 13c0 6.5-11 14-11 14z"
+                          fill="rgba(255,255,255,0.92)"/>
+                    <polyline points="9,17 11,17 13,12 15,22 17,15 19,19 21,17 25,17"
+                              stroke="#FF2631" stroke-width="1.6" fill="none"
+                              stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span style="
+                    font-size: 1.65rem;
+                    font-weight: 800;
+                    color: #FFFFFF;
+                    letter-spacing: -0.4px;
+                    text-shadow: 0 2px 8px rgba(0,0,0,0.25);
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                ">MedBoard</span>
+            </div>
+            <div style="
+                color: rgba(255,255,255,0.75);
+                font-size: 0.82rem;
+                font-weight: 400;
+                letter-spacing: 0.4px;
+                padding-left: 2px;
+            ">Dashboard de Saúde UFSM</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     st.markdown("### 🔍 Filtros Globais")
@@ -234,21 +306,38 @@ with st.sidebar:
     # Faixa etária
     age_vals = df_full["age"].dropna()
     age_min, age_max = int(age_vals.min()), int(age_vals.max())
+
+    # IMC
+    bmi_vals = df_full["bmi"].dropna()
+    bmi_min, bmi_max = round(float(bmi_vals.min()), 1), round(float(bmi_vals.max()), 1)
+
+    # Armazena defaults no session_state para o callback de reset
+    st.session_state._age_min = age_min
+    st.session_state._age_max = age_max
+    st.session_state._bmi_min = bmi_min
+    st.session_state._bmi_max = bmi_max
+
+    def _reset_filters():
+        st.session_state.age_slider    = (st.session_state._age_min, st.session_state._age_max)
+        st.session_state.bmi_slider    = (st.session_state._bmi_min, st.session_state._bmi_max)
+        st.session_state.include_no_bmi = True
+        for col in CVD_CONDITIONS:
+            st.session_state[f"sidebar_cvd_{col}"] = False
+
     age_range = st.slider(
         "Faixa Etária (anos)",
         min_value=age_min, max_value=age_max,
         value=(age_min, age_max),
+        key="age_slider",
         help="Filtra todos os gráficos e a tabela por intervalo de idade.",
     )
 
-    # IMC
-    bmi_vals = df_full["bmi"].dropna()
-    bmi_min, bmi_max = float(bmi_vals.min()), float(bmi_vals.max())
-    include_no_bmi = st.checkbox("Incluir registros sem IMC", value=True)
+    include_no_bmi = st.checkbox("Incluir registros sem IMC", value=True, key="include_no_bmi")
     bmi_range = st.slider(
         "Faixa de IMC (kg/m²)",
-        min_value=round(bmi_min, 1), max_value=round(bmi_max, 1),
-        value=(round(bmi_min, 1), round(bmi_max, 1)),
+        min_value=bmi_min, max_value=bmi_max,
+        value=(bmi_min, bmi_max),
+        key="bmi_slider",
         help="Índice de Massa Corporal.",
     )
 
@@ -261,11 +350,13 @@ with st.sidebar:
                 f"Apenas com {label}", value=False, key=f"sidebar_cvd_{col}"
             )
 
-    if st.button("↺ Resetar Filtros", use_container_width=True):
-        st.rerun()
+    st.button("↺ Resetar Filtros", use_container_width=True, on_click=_reset_filters)
 
     st.divider()
-    st.caption("Projeto de Software 1 · UFSM")
+    st.markdown(
+        "<small style='color:#6B7280'>Projeto de Software 1 · UFSM<br><a href='https://github.com/diego-rockenbach' target='_blank'>Diego Rockenbach</a> & <a href='https://github.com/lucasaued' target='_blank'>Lucas Aued</a></small>",
+        unsafe_allow_html=True,
+    )
 
 
 # ── Aplicar filtros ───────────────────────────────────────────────────────────
