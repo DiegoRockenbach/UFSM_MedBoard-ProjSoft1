@@ -407,7 +407,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown(
-        "<small style='color:#6B7280'>Projeto de Software 1 · UFSM<br><a href='https://github.com/diego-rockenbach' target='_blank'>Diego Rockenbach</a> & <a href='https://github.com/lucasaued' target='_blank'>Lucas Aued</a></small>",
+        "<small style='color:#6B7280'>Projeto de Software 1 · UFSM<br><a href='https://github.com/DiegoRockenbach' target='_blank'>Diego Rockenbach</a> & <a href='https://github.com/lucasaued' target='_blank'>Lucas Aued</a></small>",
         unsafe_allow_html=True,
     )
 
@@ -1061,7 +1061,7 @@ st.divider()
 st.markdown(
     "<center><small style='color:#6B7280'>"
     "MedBoard &nbsp;·&nbsp; "
-    "<a href='https://github.com/diego-rockenbach' target='_blank'>Diego Rockenbach</a>"
+    "<a href='https://github.com/DiegoRockenbach' target='_blank'>Diego Rockenbach</a>"
     " &amp; "
     "<a href='https://github.com/lucasaued' target='_blank'>Lucas Aued</a>"
     " &nbsp;·&nbsp; UFSM"
