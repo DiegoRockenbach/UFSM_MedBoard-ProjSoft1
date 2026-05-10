@@ -46,18 +46,59 @@ st.markdown(
     }
 
     /* Barra de abas */
+    [data-testid="stTabs"] {
+        margin-top: -3rem !important;
+        margin-bottom: 0.5rem !important;
+    }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
-        background-color: #EFF6FF;
-        padding: 6px 8px;
-        border-radius: 10px;
+        gap: 12px;
+        background: linear-gradient(90deg, rgba(199, 135, 255, 0.1) 0%, rgba(247, 54, 112, 0.1) 100%);
+        padding: 10px 8px;
+        border-radius: 12px;
+        margin-bottom: 1.5rem !important;
+        border-bottom: 1px solid #D1D5DB;
+        padding-bottom: 1rem !important;
+        display: flex !important;
+        width: 100% !important;
+    }
+    .stTabs [data-baseweb="tab"],
+    .stTabs [data-baseweb="tab"] [data-testid="stBaseButton-primary"],
+    .stTabs [data-baseweb="tab"] button {
+        transition: none !important;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 42px;
-        padding: 0 18px;
-        border-radius: 8px;
-        font-weight: 500;
+        height: 50px;
+        padding: 0 12px;
+        border-radius: 10px;
+        font-weight: 600;
         font-size: 0.9rem;
+        background-color: white !important;
+        border: 1px solid rgba(219, 221, 225, 0.5) !important;
+        color: #000000 !important;
+        transition: transform 0.2s ease !important;
+        flex: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        transform: scale(1.04) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    }
+    .stTabs [aria-selected="true"] [data-testid="stBaseButton-primary"] {
+        background: linear-gradient(135deg, #FA3939 0%, #F73670 100%) !important;
+        border-color: #FA3939 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        box-shadow: 0 4px 12px rgba(250, 57, 57, 0.3) !important;
+        border-bottom: 4px solid #FA3939 !important;
+    }
+
+    /* Indicador deslizante da aba ativa */
+    .stTabs [data-baseweb="tab-highlight"] {
+        background-color: #FA3939 !important;
+        height: 3px !important;
+        border-radius: 2px !important;
     }
 
     /* Título principal */
@@ -161,6 +202,18 @@ st.markdown(
         transition: color 0.15s;
     }
     [data-testid="stSidebar"] small a:hover {
+        color: #9CA3AF !important;
+    }
+
+    /* Links dos autores no rodapé */
+    .main small a,
+    [data-testid="stMarkdownContainer"] small a {
+        color: #6B7280 !important;
+        text-decoration: none !important;
+        transition: color 0.15s;
+    }
+    .main small a:hover,
+    [data-testid="stMarkdownContainer"] small a:hover {
         color: #9CA3AF !important;
     }
 
@@ -959,51 +1012,59 @@ with tab5:
         )
 
     extra = [color_by] if color_by != "(nenhum)" else []
-    df_sc = df[[x_axis, y_axis] + extra].dropna(subset=[x_axis, y_axis])
-    df_sc = df_sc.sample(min(3000, len(df_sc)), random_state=42)
 
-    if color_by != "(nenhum)" and color_by in df_sc.columns:
-        df_sc["Status"] = df_sc[color_by].apply(
-            lambda x: CVD_CONDITIONS[color_by] if x else "Sem condição"
-        )
-        c_field = "Status"
-        c_map   = {CVD_CONDITIONS[color_by]: C_RED, "Sem condição": C_BLUE}
+    # Validação: impedir que X e Y sejam iguais
+    if x_axis == y_axis:
+        st.error("❌ Os eixos X e Y não podem ser a mesma coluna. Selecione colunas diferentes.")
     else:
-        c_field = None
-        c_map   = None
+        df_sc = df[[x_axis, y_axis] + extra].dropna(subset=[x_axis, y_axis])
+        df_sc = df_sc.sample(min(3000, len(df_sc)), random_state=42)
 
-    fig = px.scatter(
-        df_sc, x=x_axis, y=y_axis,
-        color=c_field, color_discrete_map=c_map,
-        opacity=0.45, trendline="lowess", template=TPLT,
-        labels={x_axis: lbl(x_axis), y_axis: lbl(y_axis)},
-    )
-    fig.update_layout(height=450, margin=dict(l=0, r=0, t=10, b=0),
-                      legend=dict(orientation="h", y=1.08))
-    st.plotly_chart(fig, use_container_width=True)
+        if color_by != "(nenhum)" and color_by in df_sc.columns:
+            df_sc["Status"] = df_sc[color_by].apply(
+                lambda x: CVD_CONDITIONS[color_by] if x else "Sem condição"
+            )
+            c_field = "Status"
+            c_map   = {CVD_CONDITIONS[color_by]: C_RED, "Sem condição": C_BLUE}
+        else:
+            c_field = None
+            c_map   = None
 
-    # Coeficiente de correlação
-    corr_val = df[[x_axis, y_axis]].dropna().corr().iloc[0, 1]
-    strength = (
-        "muito fraca" if abs(corr_val) < 0.1 else
-        "fraca"       if abs(corr_val) < 0.3 else
-        "moderada"    if abs(corr_val) < 0.5 else
-        "forte"       if abs(corr_val) < 0.7 else
-        "muito forte"
-    )
-    direction = "positiva" if corr_val >= 0 else "negativa"
-    st.info(
-        f"Correlação de Pearson entre **{lbl(x_axis)}** e **{lbl(y_axis)}**: "
-        f"**{corr_val:.4f}** — correlação **{strength} {direction}**."
-    )
+        fig = px.scatter(
+            df_sc, x=x_axis, y=y_axis,
+            color=c_field, color_discrete_map=c_map,
+            opacity=0.45, trendline="lowess", template=TPLT,
+            labels={x_axis: lbl(x_axis), y_axis: lbl(y_axis)},
+        )
+        fig.update_layout(height=450, margin=dict(l=0, r=0, t=10, b=0),
+                          legend=dict(orientation="h", y=1.08))
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Coeficiente de correlação
+        corr_val = df[[x_axis, y_axis]].dropna().corr().iloc[0, 1]
+        strength = (
+            "muito fraca" if abs(corr_val) < 0.1 else
+            "fraca"       if abs(corr_val) < 0.3 else
+            "moderada"    if abs(corr_val) < 0.5 else
+            "forte"       if abs(corr_val) < 0.7 else
+            "muito forte"
+        )
+        direction = "positiva" if corr_val >= 0 else "negativa"
+        st.info(
+            f"Correlação de Pearson entre **{lbl(x_axis)}** e **{lbl(y_axis)}**: "
+            f"**{corr_val:.4f}** — correlação **{strength} {direction}**."
+        )
 
 
 # ── Rodapé ────────────────────────────────────────────────────────────────────
 st.divider()
 st.markdown(
-    "<center><small>"
-    "MedBoard &nbsp;·&nbsp; Projeto de Software 1 &nbsp;·&nbsp; UFSM &nbsp;·&nbsp; "
-    "Dados: NHANES – National Health and Nutrition Examination Survey"
+    "<center><small style='color:#6B7280'>"
+    "MedBoard &nbsp;·&nbsp; "
+    "<a href='https://github.com/diego-rockenbach' target='_blank'>Diego Rockenbach</a>"
+    " &amp; "
+    "<a href='https://github.com/lucasaued' target='_blank'>Lucas Aued</a>"
+    " &nbsp;·&nbsp; UFSM"
     "</small></center>",
     unsafe_allow_html=True,
 )
