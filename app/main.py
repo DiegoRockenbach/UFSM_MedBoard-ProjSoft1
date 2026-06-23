@@ -18,7 +18,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from database import load_data
+from database import get_data_source, load_data
 
 # ── Configuração da página ────────────────────────────────────────────────────
 st.set_page_config(
@@ -820,6 +820,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.divider()
+    st.caption(f"Fonte dos dados: {get_data_source(df_full)}")
 
     st.markdown("### 🔍 Filtros Globais")
 

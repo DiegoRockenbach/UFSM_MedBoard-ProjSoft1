@@ -1,96 +1,86 @@
 """
 app/database.py
-Camada de acesso a dados: Supabase (primário) com fallback para CSV local.
+Camada de acesso a dados: Supabase como fonte principal, com fallback CSV opcional.
 """
 
+from __future__ import annotations
+
 import os
+
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
+try:
+    from .nhanes_mapping import CSV_TO_DB, CVD_COLUMNS
+except ImportError:
+    from nhanes_mapping import CSV_TO_DB, CVD_COLUMNS
+
 load_dotenv()
 
-# ── Mapeamento de colunas CSV → banco de dados ────────────────────────────────
-CSV_TO_DB: dict[str, str] = {
-    "SEQN": "seqn",
-    "Protein": "protein",
-    "Carbohydrates": "carbohydrates",
-    "Sugars": "sugars",
-    "Fiber": "fiber",
-    "Saturated_Fat": "saturated_fat",
-    "Monounsaturated_Fat": "monounsaturated_fat",
-    "Polyunsaturated_Fat": "polyunsaturated_fat",
-    "Cholesterol": "cholesterol",
-    "Beta_Carotene": "beta_carotene",
-    "Cryptoxanthin": "cryptoxanthin",
-    "Lutein_Zeaxanthin": "lutein_zeaxanthin",
-    "Thiamin": "thiamin",
-    "Riboflavin": "riboflavin",
-    "Niacin": "niacin",
-    "Vitamin_B6": "vitamin_b6",
-    "Folic_Acid": "folic_acid",
-    "Food_Folate": "food_folate",
-    "Vitamin_B12": "vitamin_b12",
-    "Vitamin_C": "vitamin_c",
-    "Vitamin_D": "vitamin_d",
-    "Vitamin_E": "vitamin_e",
-    "Vitamin_K": "vitamin_k",
-    "Iron": "iron",
-    "Choline": "choline",
-    "Calcium": "calcium",
-    "Phosphorus": "phosphorus",
-    "Magnesium": "magnesium",
-    "Zinc": "zinc",
-    "Copper": "copper",
-    "Sodium": "sodium",
-    "Potassium": "potassium",
-    "Selenium": "selenium",
-    "Theobromine": "theobromine",
-    "Moisture": "moisture",
-    "Congestive": "congestive",
-    "Coronary": "coronary",
-    "Heart_attack": "heart_attack",
-    "Stroke": "stroke",
-    "Angina": "angina",
-    "Age": "age",
-    "BMI": "bmi",
-    "Waist_circ": "waist_circ",
-    "Systolic_BP": "systolic_bp",
-    "Diastolic_BP": "diastolic_bp",
-    "Total_Colesterol": "total_cholesterol",  # corrige o typo do CSV original
-    "C_Reactive": "c_reactive",
-}
-
-CVD_COLUMNS = ["congestive", "coronary", "heart_attack", "stroke", "angina"]
+TABLE_NAME = "nhanes_cvd"
+PAGE_SIZE = 1000
+DATA_SOURCE_KEY = "medboard_data_source"
 
 
-# ── Preparação dos dados ──────────────────────────────────────────────────────
+def _allow_csv_fallback() -> bool:
+    return os.environ.get("ALLOW_CSV_FALLBACK", "").strip().lower() == "true"
 
-def _convert_cvd(val) -> bool:
-    """Converte flags CVD: 2/True/'2' → True, qualquer outro → False."""
-    return val is True or val == 2 or val == 2.0 or str(val) == "2"
+
+def get_data_source(df: pd.DataFrame | None = None) -> str:
+    if df is not None:
+        source = df.attrs.get("data_source")
+        if source:
+            return source
+    return st.session_state.get(DATA_SOURCE_KEY, "Fonte nao carregada")
+
+
+def _convert_cvd(value) -> bool | None:
+    """Normaliza flags cardiovasculares vindas do Supabase ou do CSV fallback."""
+    if pd.isna(value):
+        return None
+
+    if value is True or str(value).lower() == "true":
+        return True
+    if value is False or str(value).lower() == "false":
+        return False
+
+    # Mantem compatibilidade apenas com o CSV de fallback: 1 = sim, 2 = nao.
+    if value == 1 or value == 1.0 or str(value) in {"1", "1.0"}:
+        return True
+    if value == 2 or value == 2.0 or str(value) in {"2", "2.0"}:
+        return False
+    if value == 9 or value == 9.0 or str(value) in {"9", "9.0"}:
+        return None
+
+    return None
 
 
 def _prepare(df: pd.DataFrame) -> pd.DataFrame:
-    """Normaliza tipos e valores ausentes após qualquer fonte de carga."""
-    # Flags cardiovasculares → bool
+    """Normaliza o DataFrame para o formato esperado por app/main.py."""
+    if "created_at" in df.columns:
+        df = df.drop(columns=["created_at"])
+
+    if df.empty:
+        return df
+
     for col in CVD_COLUMNS:
         if col in df.columns:
             df[col] = df[col].apply(_convert_cvd)
 
-    # Colunas numéricas → float/int
     skip = set(CVD_COLUMNS) | {"seqn"}
     for col in df.columns:
         if col not in skip:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    if "seqn" in df.columns:
+        df["seqn"] = pd.to_numeric(df["seqn"], errors="coerce").astype("Int64")
+
     return df
 
 
-# ── Fontes de dados ───────────────────────────────────────────────────────────
-
 def _load_csv() -> pd.DataFrame:
-    """Carrega diretamente do arquivo CSV (fallback sem Supabase)."""
+    """Carrega o CSV local apenas quando ALLOW_CSV_FALLBACK=true."""
     csv_path = os.path.join(
         os.path.dirname(__file__), "..", "Dataset", "Nhanes_cvd_raw.csv"
     )
@@ -100,59 +90,67 @@ def _load_csv() -> pd.DataFrame:
 
 
 def _load_supabase() -> pd.DataFrame:
-    """Carrega todos os registros do Supabase usando paginação."""
-    from supabase import create_client  # import tardio
+    """Carrega todos os registros do Supabase com paginacao por seqn."""
+    from supabase import create_client
 
     url = os.environ.get("SUPABASE_URL", "").strip()
-    key = os.environ.get("SUPABASE_KEY", "").strip()
+    anon_key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
 
-    if not url or not key:
+    if not url or url.startswith("https://seu-projeto") or not anon_key:
         raise ValueError(
-            "SUPABASE_URL e SUPABASE_KEY não configurados. "
-            "Copie .env.example para .env e preencha as credenciais."
+            "SUPABASE_URL e SUPABASE_ANON_KEY nao configurados no arquivo .env."
         )
 
-    client = create_client(url, key)
+    client = create_client(url, anon_key)
     all_rows: list[dict] = []
-    page_size = 1000
     offset = 0
 
     while True:
-        resp = (
-            client.table("nhanes_cvd")
+        response = (
+            client.table(TABLE_NAME)
             .select("*")
-            .range(offset, offset + page_size - 1)
+            .order("seqn")
+            .range(offset, offset + PAGE_SIZE - 1)
             .execute()
         )
-        if not resp.data:
+
+        rows = response.data or []
+        if not rows:
             break
-        all_rows.extend(resp.data)
-        if len(resp.data) < page_size:
+
+        all_rows.extend(rows)
+        if len(rows) < PAGE_SIZE:
             break
-        offset += page_size
+
+        offset += PAGE_SIZE
 
     return _prepare(pd.DataFrame(all_rows))
 
 
-# ── Ponto de entrada principal (com cache) ────────────────────────────────────
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_data() -> pd.DataFrame:
-    """
-    Carrega os dados de saúde NHANES.
-    Usa Supabase quando as variáveis de ambiente estão configuradas;
-    caso contrário, carrega do CSV local automaticamente.
-    """
-    url = os.environ.get("SUPABASE_URL", "").strip()
-    key = os.environ.get("SUPABASE_KEY", "").strip()
-
-    if url and key and not url.startswith("https://seu-projeto"):
-        try:
-            return _load_supabase()
-        except Exception as exc:
+    """Carrega dados do Supabase; CSV somente com ALLOW_CSV_FALLBACK=true."""
+    try:
+        df = _load_supabase()
+        df.attrs["data_source"] = "Supabase"
+        st.session_state[DATA_SOURCE_KEY] = "Supabase"
+        return df
+    except Exception as exc:
+        if _allow_csv_fallback():
             st.warning(
-                f"⚠️ Supabase indisponível ({exc}). "
-                "Carregando dados do arquivo CSV local..."
+                f"Supabase indisponivel ({exc}). "
+                "Carregando CSV local porque ALLOW_CSV_FALLBACK=true."
             )
+            df = _load_csv()
+            df.attrs["data_source"] = "CSV local (fallback)"
+            st.session_state[DATA_SOURCE_KEY] = "CSV local (fallback)"
+            return df
 
-    return _load_csv()
+        st.session_state[DATA_SOURCE_KEY] = "Erro ao carregar Supabase"
+        st.error(
+            "Nao foi possivel carregar os dados do Supabase. "
+            f"Detalhes: {exc} "
+            "Configure SUPABASE_URL e SUPABASE_ANON_KEY no .env, "
+            "ou use ALLOW_CSV_FALLBACK=true apenas em desenvolvimento."
+        )
+        st.stop()
