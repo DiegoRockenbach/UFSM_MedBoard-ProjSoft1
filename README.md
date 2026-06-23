@@ -16,8 +16,9 @@ com 27.493 registros e 46 variáveis clínicas e nutricionais.
 - **Explorar Dados** — Tabela paginada, ordenável, filtrável e exportável em CSV
 - **Visão Geral** — KPIs populacionais, distribuições de idade/IMC, prevalência de doenças cardiovasculares
 - **Nutrição** — Box plots e violinos por categoria (macronutrientes, vitaminas, minerais), comparação entre grupos CVD
-- **Fatores de Risco** — Pressão arterial, IMC, colesterol e PCR estratificados por condição
+- **Fatores de Risco** — Pressão arterial, IMC, colesterol e PCR estratificados por condição cardiovascular
 - **Correlações** — Mapa de calor e dispersão interativa com linha de tendência
+- **Ref. Clínicas** — Comparação do valor médio da população com intervalos de referência clínicos e IDR (ingestão diária recomendada)
 
 ### Tecnologias
 
@@ -61,7 +62,7 @@ cp .env.example .env
 ## Executar o Dashboard
 
 ```bash
-streamlit run app/main.py
+python -m streamlit run app/main.py
 ```
 
 ## Estrutura do Projeto
@@ -69,12 +70,13 @@ streamlit run app/main.py
 ```
 UFSM_MedBoard-ProjSoft1/
 ├── app/
-│   ├── main.py          # Dashboard Streamlit (frontend + lógica)
-│   └── database.py      # Camada de dados (Supabase + fallback CSV)
+│   ├── main.py           # Dashboard Streamlit (frontend + lógica)
+│   ├── database.py       # Camada de dados (Supabase)
+│   └── nhanes_mapping.py # Mapeamento de colunas CSV → banco
 ├── scripts/
-│   └── import_data.py   # Importação CSV → Supabase (uso único)
+│   └── import_data.py    # Importação CSV → Supabase (uso único)
 ├── Dataset/
-│   └── Nhanes_cvd_raw.csv
+│   └── Nhanes_cvd_raw.csv  # Dataset original (apenas fallback local)
 ├── schema.sql            # DDL da tabela Supabase
 ├── requirements.txt
 ├── .env.example
