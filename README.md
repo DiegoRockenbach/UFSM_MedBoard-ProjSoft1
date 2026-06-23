@@ -11,6 +11,8 @@ Plataforma web para visualização e análise de dados de saúde cardiovascular 
 dataset **NHANES** (National Health and Nutrition Examination Survey),
 com 27.493 registros e 46 variáveis clínicas e nutricionais.
 
+## Acesso web em: [MedBoard - Dashboard Online](https://medboardufsm.streamlit.app)
+
 ### Funcionalidades
 
 - **Explorar Dados** — Tabela paginada, ordenável, filtrável e exportável em CSV
@@ -32,7 +34,7 @@ com 27.493 registros e 46 variáveis clínicas e nutricionais.
 
 ---
 
-## Instalação
+## Instalação local
 
 ```bash
 # 1. Clonar o repositório
