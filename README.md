@@ -42,6 +42,20 @@ cd UFSM_MedBoard-ProjSoft1
 pip install -r requirements.txt
 ```
 
+Antes de rodar o dashboard localmente, crie o arquivo `.env` a partir do modelo `.env.example`.
+
+No Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+No macOS/Linux:
+
+```bash
+cp .env.example .env
+```
+
 ---
 
 ## Executar o Dashboard
