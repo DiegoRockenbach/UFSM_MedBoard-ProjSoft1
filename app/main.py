@@ -827,7 +827,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.divider()
-    st.caption(f"Fonte dos dados: {get_data_source(df_full)}")
+    st.caption("Fonte dos dados: NHANES")
 
     st.markdown("### 🔍 Filtros Globais")
 
@@ -875,7 +875,7 @@ with st.sidebar:
     for col, label in CVD_CONDITIONS.items():
         if col in df_full.columns:
             cvd_filter[col] = st.checkbox(
-                f"Apenas com {label}", value=False, key=f"sidebar_cvd_{col}"
+                label, value=False, key=f"sidebar_cvd_{col}"
             )
 
     st.button("↺ Resetar Filtros", use_container_width=True, on_click=_reset_filters)
