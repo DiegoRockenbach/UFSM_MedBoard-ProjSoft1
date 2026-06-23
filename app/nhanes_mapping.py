@@ -24,7 +24,9 @@ CSV_TO_DB: dict[str, str] = {
     "Vitamin_D": "vitamin_d",
     "Vitamin_E": "vitamin_e",
     "Vitamin_K": "vitamin_k",
-    "Iron": "iron",
+    # O CSV local rotula esta coluna como "Iron", mas os valores seguem a
+    # posicao/formula do NHANES para folato DFE, nao ferro alimentar.
+    "Iron": "folate_dfe",
     "Choline": "choline",
     "Calcium": "calcium",
     "Phosphorus": "phosphorus",

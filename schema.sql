@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS nhanes_cvd (
     vitamin_b6           FLOAT,
     folic_acid           FLOAT,
     food_folate          FLOAT,
+    folate_dfe           FLOAT,
     vitamin_b12          FLOAT,
     vitamin_c            FLOAT,
     vitamin_d            FLOAT,
@@ -33,6 +34,7 @@ CREATE TABLE IF NOT EXISTS nhanes_cvd (
     vitamin_k            FLOAT,
 
     -- Minerais
+    -- Ausente no CSV atual: o campo chamado "Iron" no arquivo local e folato DFE.
     iron                 FLOAT,
     choline              FLOAT,
     calcium              FLOAT,
@@ -66,6 +68,16 @@ CREATE TABLE IF NOT EXISTS nhanes_cvd (
 
     created_at           TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migracao para bancos ja criados antes da correcao do cabecalho "Iron" no CSV.
+ALTER TABLE nhanes_cvd
+    ADD COLUMN IF NOT EXISTS folate_dfe FLOAT;
+
+UPDATE nhanes_cvd
+SET folate_dfe = iron,
+    iron = NULL
+WHERE folate_dfe IS NULL
+  AND iron > 100;
 
 -- Row Level Security
 ALTER TABLE nhanes_cvd ENABLE ROW LEVEL SECURITY;

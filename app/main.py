@@ -245,9 +245,9 @@ NUTRIENTS_MACRO    = ["protein", "carbohydrates", "sugars", "fiber",
                       "saturated_fat", "monounsaturated_fat", "polyunsaturated_fat", "cholesterol"]
 NUTRIENTS_VITAMINS = ["vitamin_c", "vitamin_d", "vitamin_e", "vitamin_k",
                       "vitamin_b6", "vitamin_b12", "thiamin", "riboflavin",
-                      "niacin", "folic_acid", "food_folate", "beta_carotene",
+                      "niacin", "folic_acid", "food_folate", "folate_dfe", "beta_carotene",
                       "cryptoxanthin", "lutein_zeaxanthin"]
-NUTRIENTS_MINERALS = ["calcium", "iron", "magnesium", "zinc", "sodium",
+NUTRIENTS_MINERALS = ["calcium", "magnesium", "zinc", "sodium",
                       "potassium", "phosphorus", "copper", "selenium", "choline"]
 
 LABELS: dict[str, str] = {
@@ -270,6 +270,7 @@ LABELS: dict[str, str] = {
     "niacin":              "Niacina (mg)",
     "folic_acid":          "Ácido Fólico (mcg)",
     "food_folate":         "Folato Alimentar (mcg)",
+    "folate_dfe":          "Folato DFE (mcg)",
     "beta_carotene":       "Beta-Caroteno (mcg)",
     "cryptoxanthin":       "Criptoxantina (mcg)",
     "lutein_zeaxanthin":   "Luteína + Zeaxantina (mcg)",
@@ -316,7 +317,7 @@ REFERENCE_VALUES: dict[str, dict] = {
         ),
     },
     "systolic_bp": {
-        "ref_min": None, "ref_max": 120.0,
+        "ref_min": 90.0, "ref_max": 120.0,
         "tipo": "Clínico", "fonte": "AHA/ACC 2017",
         "msg_baixo": (
             "Pressão sistólica abaixo de 90 mmHg caracteriza hipotensão, podendo causar tontura, "
@@ -331,7 +332,7 @@ REFERENCE_VALUES: dict[str, dict] = {
         ),
     },
     "diastolic_bp": {
-        "ref_min": None, "ref_max": 80.0,
+        "ref_min": 60.0, "ref_max": 80.0,
         "tipo": "Clínico", "fonte": "AHA/ACC 2017",
         "msg_baixo": (
             "Pressão diastólica muito baixa (< 60 mmHg) pode indicar desidratação grave, "
@@ -612,6 +613,16 @@ REFERENCE_VALUES: dict[str, dict] = {
         ),
         "msg_alto": None,
     },
+    "folate_dfe": {
+        "ref_min": 400.0, "ref_max": None,
+        "tipo": "Ingestão Diária Recomendada", "fonte": "IOM DRI 1998 / NIH ODS",
+        "msg_baixo": (
+            "Baixa ingestão de folato em DFE está associada a anemia megaloblástica, "
+            "elevação de homocisteína e, em gestantes, maior risco de defeitos do tubo neural. "
+            "DFE ajusta a maior biodisponibilidade do ácido fólico em alimentos fortificados."
+        ),
+        "msg_alto": None,
+    },
     "beta_carotene": {
         "ref_min": None, "ref_max": 30000.0,
         "tipo": "Ingestão Diária Recomendada", "fonte": "IOM DRI 2000",
@@ -655,7 +666,7 @@ REFERENCE_VALUES: dict[str, dict] = {
         ),
     },
     "magnesium": {
-        "ref_min": 310.0, "ref_max": 350.0,
+        "ref_min": 310.0, "ref_max": None,
         "tipo": "Ingestão Diária Recomendada", "fonte": "IOM DRI 1997",
         "msg_baixo": (
             "Hipomagnesemia está associada a câimbras musculares, arritmias cardíacas (especialmente "
@@ -663,11 +674,7 @@ REFERENCE_VALUES: dict[str, dict] = {
             "cofator de mais de 300 enzimas e essencial para síntese de ATP. Baixo consumo é "
             "comum em dietas ricas em alimentos ultraprocessados."
         ),
-        "msg_alto": (
-            "Hipermagnesemia alimentar é extremamente rara em pessoas saudáveis, pois o rim excreta "
-            "o excesso eficientemente. O risco de toxicidade existe com suplementação excessiva "
-            "em pessoas com insuficiência renal, causando hipotensão e depressão do SNC."
-        ),
+        "msg_alto": None,
     },
     "zinc": {
         "ref_min": 8.0, "ref_max": 40.0,
@@ -757,12 +764,12 @@ REFERENCE_VALUES: dict[str, dict] = {
 REF_GROUPS: dict[str, list[str]] = {
     "🩺 Marcadores Clínicos":    ["total_cholesterol", "systolic_bp", "diastolic_bp",
                                    "c_reactive", "bmi", "waist_circ"],
-    "🥩 Macronutrientes":        ["protein", "carbohydrates", "sugars", "fiber",
+    "🥩 Macronutrientes":        ["protein", "carbohydrates", "fiber",
                                    "saturated_fat", "cholesterol", "sodium"],
     "💊 Vitaminas":              ["vitamin_c", "vitamin_d", "vitamin_e", "vitamin_k",
                                    "vitamin_b6", "vitamin_b12", "thiamin", "riboflavin",
-                                   "niacin", "folic_acid", "food_folate", "beta_carotene"],
-    "⚗️ Minerais":               ["calcium", "iron", "magnesium", "zinc", "potassium",
+                                   "niacin", "folate_dfe"],
+    "⚗️ Minerais":               ["calcium", "magnesium", "zinc", "potassium",
                                    "phosphorus", "copper", "selenium", "choline"],
 }
 

@@ -64,6 +64,14 @@ def _prepare(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
+    # Versoes antigas do schema/importacao carregaram folato DFE na coluna
+    # "iron" porque o CSV local veio com esse cabecalho incorreto.
+    if "folate_dfe" not in df.columns and "iron" in df.columns:
+        iron_probe = pd.to_numeric(df["iron"], errors="coerce")
+        if iron_probe.dropna().median() > 100:
+            df["folate_dfe"] = iron_probe
+            df["iron"] = pd.NA
+
     for col in CVD_COLUMNS:
         if col in df.columns:
             df[col] = df[col].apply(_convert_cvd)
